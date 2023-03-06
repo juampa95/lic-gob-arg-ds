@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Mar  4 00:12:41 2023
+Created on Mon Mar  6 19:35:22 2023
 
+@author: jpman
+"""
+"""
+Created on Sat Mar  4 00:12:41 2023
 @author: jpman
 """
 import pandas as pd
@@ -22,20 +26,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.keys import Keys
 import time
-
-
-
-# =============================================================================
-# Datos iniciales
-# =============================================================================
-
-df =pd.read_csv('D:/gitProyects/licitacionesEstatales-ds/ReporteProcesos.csv')
-df['Número de Proceso'][0]
-
-
-# =============================================================================
-# Scraper 
-# =============================================================================
 
 driver = webdriver.Chrome(ChromeDriverManager().install())
 driver.get("https://comprar.gob.ar/BuscarAvanzado.aspx")
@@ -88,8 +78,6 @@ for i in range(len(titulos)):
 
 info
 
-s_info = pd.Series(info['Información básica del proceso'])
-s_info
 # CON ESTAS LINEAS OBTENEMOS LOS DATOS DEL CRONOGRAMA 
 
 crono = {}
@@ -103,15 +91,14 @@ for i in range(len(cronograma_titulos)):
 
 cronograma
 
-s_crono = pd.Series(crono)
-s_crono
+
 # CON ESTAS LINEAS OBTENEMOS TODOS LOS DATOS DE LOS ELEMENTOS QUE SON TABLAS 
 
 nomb_col = driver.find_elements(By.XPATH,'//div[h4[text()="Documento contractual por proveedor"] and //table[thead and tbody]]//th')
 cant_filas = driver.find_elements(By.XPATH,'//div[h4[text()="Documento contractual por proveedor"] and //table[thead and tbody]]//tbody//tr')
 valores_tablas = driver.find_elements(By.XPATH,'//div[h4[text()="Documento contractual por proveedor"] and //table[thead and tbody]]//td')
 
-# VERSION MAS ACTUAL PARA QUE TODO ENTRE EN UNA SERIE DE PANDAS 
+
 h4 = driver.find_elements(By.XPATH,'//div/h4')
 dic_tablas = {}
 for h in h4:
@@ -119,16 +106,13 @@ for h in h4:
     if len(nomb_col) != 0:
         cant_filas = driver.find_elements(By.XPATH,f'//div[h4[text()="{h.text}"] and //table[thead and tbody]]//tbody//tr')
         filas_datos = {}
-        print(h.text)
         if len(cant_filas) != 1:
-            fila_datos = {}
             for i in range(1,len(cant_filas)+1):
-                
+                fila_datos = {}
                 valores_tablas = driver.find_elements(By.XPATH,f'//div[h4[text()="{h.text}"] and //table[thead and tbody]]//tbody//tr[{i}]/td')
                 for p in range(len(nomb_col)):
-                    fila_datos[nomb_col[p].text + str(i)] = valores_tablas[p].text
-                    fila_datos.update(fila_datos)
-                filas_datos = fila_datos
+                    fila_datos[nomb_col[p].text] = valores_tablas[p].text
+                filas_datos[str(i-1)] = fila_datos
         else:
             fila_datos = {}
             valores_tablas = driver.find_elements(By.XPATH,f'//div[h4[text()="{h.text}"] and //table[thead and tbody]]//tbody//tr/td')
@@ -140,16 +124,10 @@ for h in h4:
         
 dic_tablas
 
-s_tablas = pd.Series()
 
-for i in dic_tablas:
-    s_tablas = pd.concat([s_tablas,pd.Series(dic_tablas[i])])
-    
-s_tablas
-                          
 # AHORA VAMOS A TENER QUE HACER CLICK EN EL CUADRO COMPARATIVO PARA VER LOS PRECIOS QUE OFERTARON LOS COMPETIDORES
 
-driver.find_element(By.XPATH,'//div[a[@class="btn btn-link"]]/a').click()
+driver.find_element(By.XPATH,'//div[a[@class="btn btn-link"]]').click()
 emp = driver.find_elements(By.XPATH,'//div[span[h4[text()="Mostrar ofertas"]]]//div[@class="col-md-9"]/span')
 ofertas = driver.find_elements(By.XPATH,'//div[span[h4[text()="Mostrar ofertas"]]]//div[@class="col-md-3"]/span')
 
@@ -159,23 +137,42 @@ for i in emp:
         empresas.append(i.text)
         
 ofer = {}
+total_ofertas = {}
 for i in range(len(ofertas)):
-    ofer["empresa_"+str(i)]=empresas[i]
-    ofer["oferta_"+str(i)]=ofertas[i].text
-         
-ofer
-s_ofer = pd.Series(ofer)
+    ofer[empresas[i]]=ofertas[i].text
+total_ofertas['Ofertas'] = ofer
         
-s_info
-s_crono
-s_tablas
-s_ofer
+total_ofertas
 
-s_total = pd.Series()
-s_total = s_total.append([s_info,s_crono,s_tablas,s_ofer])
-s_total['Número de Proceso'] = s_total['Nº de proceso'] # esto es necesario hacerlo para poder hacer un merge con el df original 
+total_informacion = {}
 
-s_total
+total_informacion.update(info)
+total_informacion.update(cronograma)
+total_informacion.update(dic_tablas)
+total_informacion.update(total_ofertas)
 
-df2 = pd.merge(df, s_total.to_frame().T, on = 'Número de Proceso', how = 'outer')
-df2
+total_informacion
+
+with open('prueba.json','w') as archivo:
+    json.dump(total_informacion, archivo)
+    
+df = pd.read_json('D:/gitProyects/licitacionesEstatales-ds/web_scraper/prueba.json')
+df.columns
+df['Ofertas']
+
+df_info = pd.DataFrame(info)
+df_info
+df_cronograma=pd.DataFrame(cronograma)
+df_cronograma
+
+dic_tablas.keys()
+pd.DataFrame.from_dict(dic_tablas['Solicitudes de contratación asignadas al proceso'],orient='index')
+pd.DataFrame.from_dict(dic_tablas['Detalle de productos o servicios'],orient='index')
+pd.DataFrame.from_dict(dic_tablas['Pliego de bases y condiciones generales'],orient='index')
+pd.DataFrame.from_dict(dic_tablas['Penalidades'],orient='index')
+pd.DataFrame.from_dict(dic_tablas['Selección de proveedores'],orient='index')
+pd.DataFrame.from_dict(dic_tablas['Actas de apertura'],orient='index')
+pd.DataFrame.from_dict(dic_tablas['Documento contractual por proveedor'],orient='index')
+
+df_total_ofertas = pd.DataFrame(total_ofertas)
+df_total_ofertas
